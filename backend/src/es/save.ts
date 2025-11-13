@@ -1,16 +1,8 @@
-import { Client } from "@elastic/elasticsearch";
-
-const client = new Client({
-  node: process.env.ES_URL!,
-  headers: {
-    "Content-Type": "application/vnd.elasticsearch+json; compatible-with=8",
-    Accept: "application/vnd.elasticsearch+json; compatible-with=8",
-  }
-});
+import { es } from './client'
 
 export async function saveEmailToES(account: string, email: any) {
   try {
-    await client.index({
+    await es.index({
       index: "emails",
       id: `${account}-${email.uid}`,
       document: {
