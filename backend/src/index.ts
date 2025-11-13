@@ -3,6 +3,8 @@ import cors from 'cors'
 import dotenv from "dotenv";
 dotenv.config()
 
+import { startImapSync } from "./imap/startSync";
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -17,3 +19,4 @@ const startServer = async ()=>{
 }
 
 startServer();
+startImapSync();
