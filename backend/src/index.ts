@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 dotenv.config()
 
 import { startImapSync } from "./imap/startSync";
+import { setupEmailIndex } from './es/setup';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -12,11 +13,16 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const startServer = async ()=>{
-    app.listen(PORT,()=>{
-        console.log(`backend up and running port:${PORT}`)
-    })
+async function bootstrap() {
+    console.log('index setup')
+    await setupEmailIndex();
+    await startImapSync();
+
+    app.listen(PORT, () => {
+        console.log(`Backend running on http://localhost:${PORT}`);
+    });
 }
 
-startServer();
-startImapSync();
+bootstrap().catch((err) => {
+    console.error("Fatal error during startup:", err);
+});

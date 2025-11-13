@@ -1,14 +1,22 @@
+import { simpleParser } from "mailparser";
+
 export async function processNewEmail(accountLabel: string, client: any, uid: number) {
-  console.log(`[${accountLabel}] New email detected. UID = ${uid}`);
+  console.log(`[${accountLabel}] New email detected: UID ${uid}`);
 
-  const msg = await client.fetchOne(uid, { source: true, envelope: true });
+  // Fetch the raw email + envelope
+  const msg = await client.fetchOne(uid, { envelope: true, source: true });
 
-  const subject = msg.envelope.subject;
-  const from = msg.envelope.from?.[0]?.address;
-  const raw = msg.source.toString();
+  const envelope = msg.envelope;
+
+  // Parse the raw MIME message
+  const parsed = await simpleParser(msg.source);
+
+  const subject = envelope.subject || "";
+  const from = envelope.from?.[0]?.address || "";
+  const html = parsed.html || "";
+  const text = parsed.text || "";
 
   console.log("Subject:", subject);
   console.log("From:", from);
-
-  // Later: store to Elasticsearch
+  console.log("Text:", text.slice(0, 100));
 }
