@@ -1,38 +1,63 @@
-import { Router } from 'express';
-import { es } from '../es/client';
+import { Router } from "express";
+import { getEmailById, listEmails, updateEmailLabel } from "../es/save";
 
 const router = Router();
 
+/*
+ * GET /emails
+ * List emails (optionally filter by account, folder)
+*/
 router.get("/", async (req, res) => {
-    const account = req.query.account?.toString();
+  try {
+    const { accountId, folder } = req.query;
 
-    if (!account) {
-        return res.status(400).json({ error: "Query 'account' required" });
-    }
+    const emails = await listEmails({
+      accountId: accountId?.toString(),
+      folder: folder?.toString(),
+    });
 
-    try {
-        const result = await es.search({
-            index: "emails",
-            query: {
-                term: { account }
-            },
-            sort: [
-                { date: "desc" }
-            ],
-            size: 50
-        });
+    res.json(emails);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch emails" });
+  }
+});
 
-        const emails = result.hits.hits.map(hit => ({
-            id: hit._id,
-            ...(hit._source as Record<string, unknown>)
-        }));
+/*
+ * GET /emails/:id
+ * Fetch a single email
+*/
+router.get("/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const email = await getEmailById(id);
 
-        return res.json({ emails });
+    if (!email) return res.status(404).json({ error: "Email not found" });
 
-    } catch (err) {
-        console.error("Inbox error:", err);
-        return res.status(500).json({ error: "Inbox fetch failed" });
-    }
-})
+    res.json(email);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch email" });
+  }
+});
+
+/**
+ * POST /emails/:id/label
+ * Update label manually or from AI
+*/
+router.post("/:id/label", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { label } = req.body;
+
+    await updateEmailLabel(id, label);
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to update label" });
+  }
+});
 
 export default router;

@@ -1,37 +1,65 @@
-import { Router } from 'express';
-import { es } from '../es/client';
+import { Router } from "express";
+import { es } from "../es/client";
 
 const router = Router();
 
-router.get('/', async (req, res) => {
-    const q = req.query.q?.toString() || "";
-    if (!q) {
-        return res.status(400).json({ error: "Query 'q' required" });
+/*
+ * GET /search?q=keyword&accountId=abc&folder=INBOX&page=1&limit=20
+*/
+router.get("/", async (req, res) => {
+  try {
+    const { q, accountId, folder, page = 1, limit = 20 } = req.query;
+
+    const from = (Number(page) - 1) * Number(limit);
+
+    const must: any[] = [];
+    const filter: any[] = [];
+
+    if (q) {
+      must.push({
+        multi_match: {
+          query: q,
+          fields: ["subject", "text", "from"],
+        },
+      });
+    } else {
+      must.push({ match_all: {} });
     }
 
-    try {
-        const result = await es.search({
-            index: "emails",
-            query: {
-                multi_match: {
-                    query: q,
-                    fields: ["subject", "from", "text"],
-                    fuzziness: "AUTO",
-                }
-            }
-        })
-
-        const hits = result.hits.hits.map(hit => ({
-            id: hit._id,
-            ...(hit._source as Record<string, unknown>)
-        }));
-
-        return res.json({ hits });
-
-    } catch (err) {
-        console.error("Search error:", err);
-        return res.status(500).json({ error: "Search failed" });
+    if (accountId) {
+      filter.push({ term: { accountId } });
     }
-})
+
+    if (folder) {
+      filter.push({ term: { folder } });
+    }
+
+    const result = await es.search({
+      index: "emails",
+      from,
+      size: Number(limit),
+      body: {
+        query: {
+          bool: { must, filter },
+        },
+      },
+    });
+
+    const hits = result.hits.hits.map((h: any) => ({
+      id: h._id,
+      ...h._source,
+    }));
+
+    res.json({
+      page: Number(page),
+      limit: Number(limit),
+      results: hits,
+      total: typeof result.hits.total === 'number' ? result.hits.total : result.hits.total?.value,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Search failed" });
+  }
+});
 
 export default router;
