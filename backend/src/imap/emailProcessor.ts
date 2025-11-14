@@ -1,34 +1,43 @@
 import { simpleParser } from "mailparser";
 import { saveEmailToES } from "../es/save";
+import { classifyEmail } from "../ai/classifyEmail";
+import { updateEmailLabel } from "../es/save";
 
 export async function processNewEmail(accountLabel: string, client: any, uid: number) {
   console.log(`[${accountLabel}] New email detected: UID ${uid}`);
 
-  // Fetch the raw email + envelope
+  // Fetch complete message
   const msg = await client.fetchOne(uid, { envelope: true, source: true });
 
-  const { envelope, body } = msg;
+  const { envelope } = msg;
 
-  // Parse the raw MIME message
+  // Parse MIME
   const parsed = await simpleParser(msg.source);
 
   const parsedEmail = {
     uid,
-    subject: envelope.subject,
-    from: envelope.from?.[0]?.address,
-    to: envelope.to?.map(x => x.address),
-    date: envelope.date,
-    text: parsed.text,
+    folder: msg.mailbox || "INBOX",
+    subject: envelope.subject || "",
+    from: envelope.from?.[0]?.address || "",
+    to: envelope.to?.map((x) => x.address) || [],
+    cc: envelope.cc?.map((x) => x.address) || [],
+    bcc: envelope.bcc?.map((x) => x.address) || [],
+    date: envelope.date || new Date(),
+    text: parsed.text || "",
+    html: parsed.html || "",
+    messageId: parsed.messageId || "",
+    inReplyTo: parsed.inReplyTo || null,
+    references: parsed.references || [],
+    headers: Object.fromEntries(parsed.headers) || {},
+    label: null, // To be filled by AI later
+    snippet: (parsed.text || "").slice(0, 200),
   };
 
+  // Save to Elasticsearch
   await saveEmailToES(accountLabel, parsedEmail);
+  const label = await classifyEmail(parsedEmail);
+  await updateEmailLabel(`${accountLabel}-${uid}`, label);
+  console.log(`[AI] ${accountLabel}-${uid} categorized as ${label}`);
 
-  const subject = envelope.subject || "";
-  const from = envelope.from?.[0]?.address || "";
-  const html = parsed.html || "";
-  const text = parsed.text || "";
-
-  console.log("Subject:", subject);
-  console.log("From:", from);
-  console.log("Text:", text.slice(0, 100));
+  console.log(`[${accountLabel}] Email UID ${uid} indexed.`);
 }
