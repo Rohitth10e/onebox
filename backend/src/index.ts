@@ -7,6 +7,7 @@ import { startImapSync } from "./imap/startSync";
 import { setupEmailIndex } from './es/setup';
 import searchRouter from "./routes/search";
 import emailRouter from './routes/emails'
+import foldersRouter from './routes/folders'
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -17,6 +18,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/search", searchRouter)
 app.use("/emails", emailRouter);
+app.use("/folders", foldersRouter);
 
 async function bootstrap() {
     console.log('index setup')

@@ -12,8 +12,8 @@ router.get("/", async (req, res) => {
     const { accountId, folder } = req.query;
 
     const emails = await listEmails({
-      accountId: accountId?.toString(),
-      folder: folder?.toString(),
+      account: accountId?.toString(),  
+      folder: folder?.toString(),       
     });
 
     res.json(emails);

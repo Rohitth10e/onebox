@@ -10,5 +10,6 @@ export function createImapClient(account: ImapAccount) {
       user: account.user,
       pass: account.pass,
     },
+    logger: false,
   });
 }

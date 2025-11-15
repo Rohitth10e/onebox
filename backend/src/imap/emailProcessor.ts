@@ -2,9 +2,12 @@ import { simpleParser } from "mailparser";
 import { saveEmailToES } from "../es/save";
 import { classifyEmail } from "../ai/classifyEmail";
 import { updateEmailLabel } from "../es/save";
+import { sendSlackNotification } from "../automation/slack";
+import { triggerInterestedWebhook } from "../automation/webhook";
+import { logInfo, logSuccess } from "../utils/logger";
 
 export async function processNewEmail(accountLabel: string, client: any, uid: number) {
-  console.log(`[${accountLabel}] New email detected: UID ${uid}`);
+  logInfo(`${accountLabel}: New email → UID ${uid}`);
 
   // Fetch complete message
   const msg = await client.fetchOne(uid, { envelope: true, source: true });
@@ -37,7 +40,28 @@ export async function processNewEmail(accountLabel: string, client: any, uid: nu
   await saveEmailToES(accountLabel, parsedEmail);
   const label = await classifyEmail(parsedEmail);
   await updateEmailLabel(`${accountLabel}-${uid}`, label);
-  console.log(`[AI] ${accountLabel}-${uid} categorized as ${label}`);
+  logSuccess(`AI: ${accountLabel}-${uid} → ${label}`);
 
-  console.log(`[${accountLabel}] Email UID ${uid} indexed.`);
+  if (label === "Interested") {
+    const message = `
+🔥 *New Interested Lead!*
+From: ${parsedEmail.from}
+Subject: ${parsedEmail.subject}
+Snippet: ${parsedEmail.text?.slice(0, 120)}...
+  `;
+
+    await sendSlackNotification(message);
+
+    await triggerInterestedWebhook({
+      emailId: `${accountLabel}-${uid}`,
+      from: parsedEmail.from,
+      subject: parsedEmail.subject,
+      snippet: parsedEmail.text?.slice(0, 200),
+      date: parsedEmail.date,
+    });
+
+    logSuccess(`Automation triggered → ${accountLabel}-${uid}`);
+  }
+
+  logSuccess(`${accountLabel}: Indexed UID ${uid}`);
 }

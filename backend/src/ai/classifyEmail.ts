@@ -1,8 +1,13 @@
-import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { EmailLabel } from "./emailLabels";
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+const model = genAI.getGenerativeModel({
+  model: "gemini-2.5-flash",
+  generationConfig: {
+    temperature: 0,
+    responseMimeType: "application/json"
+  }
 });
 
 export async function classifyEmail(email: {
@@ -11,10 +16,15 @@ export async function classifyEmail(email: {
   text: string;
   html?: string;
 }): Promise<EmailLabel> {
-  const prompt = `
-You are an AI email classifier for a sales outreach platform.
 
-Classify the following email into EXACTLY ONE of these labels:
+  const prompt = {
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: `
+Your task is to classify an email into EXACTLY ONE of the following labels:
 - Interested
 - Meeting Booked
 - Not Interested
@@ -22,60 +32,56 @@ Classify the following email into EXACTLY ONE of these labels:
 - Out of Office
 
 Rules:
-- "Interested" → if they want to know more, ask for details, are positive
-- "Meeting Booked" → if they propose a time slot OR accept a meeting link
-- "Not Interested" → polite declines
-- "Spam" → marketing, irrelevant, mass content
-- "Out of Office" → automatic OOO replies
+- Interested: positive signs, curiosity, wants more info
+- Meeting Booked: suggests a time or accepts meeting link
+- Not Interested: declining or rejecting
+- Spam: irrelevant marketing, promo, or mass content
+- Out of Office: automatic OOO messages
 
-Return ONLY the JSON:
+You MUST output ONLY valid JSON:
 {
   "label": "Interested"
 }
 
-Email Content:
+Email:
 Subject: ${email.subject}
 From: ${email.from}
 Body: ${email.text || ""}
-  `;
+`
+          }
+        ]
+      }
+    ]
+  };
 
   try {
-    const resp = await client.responses.create({
-      model: "gpt-4o-mini",
-      input: prompt,
-    });
-
-    const output = resp.output_text;
-
-    const parsed = JSON.parse(output);
+    const result = await model.generateContent(prompt);
+    const json = result.response.text();
+    const parsed = JSON.parse(json);
 
     return parsed.label as EmailLabel;
+
   } catch (err) {
-    console.error("[AI] Classification failed, falling back to rule-based:", err);
+    console.warn("[AI] Gemini classification failed → rule-based fallback");
 
     const body = (email.text || "").toLowerCase();
 
-    if (body.includes("out of office") || body.includes("ooo")) {
+    if (body.includes("out of office") || body.includes("ooo"))
       return "Out of Office";
-    }
 
-    if (body.includes("unsubscribe") || body.includes("buy now")) {
+    if (body.includes("unsubscribe") || body.includes("buy now"))
       return "Spam";
-    }
 
     if (
       body.includes("schedule") ||
       body.includes("meeting") ||
       body.includes("calendar")
-    ) {
+    )
       return "Meeting Booked";
-    }
 
-    if (body.includes("not interested") || body.includes("no thanks")) {
+    if (body.includes("not interested") || body.includes("no thanks"))
       return "Not Interested";
-    }
 
-    // default fallback:
     return "Interested";
   }
 }
